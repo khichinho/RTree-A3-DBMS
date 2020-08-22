@@ -22,25 +22,6 @@ int endPageOffset = 0;
 
 using namespace std;
 
-class Point
-{
-public:
-    vector<int> pt;
-    Point()
-    {
-        this->pt.resize(d, INT_MIN);
-    }
-    Point(int n)
-    {
-        this->pt.resize(n);
-    }
-    Point(Point *p)
-    {
-        for (int i = 0; i < p->pt.size(); i++)
-            this->pt[i] = p->pt[i];
-    }
-}; // namespace stdclassPoint
-
 class MBR
 {
 public:
@@ -76,7 +57,7 @@ public:
         this->index = -1;
         this->parent_index = -1;
         this->bounds = new MBR(d);
-        this->child_index.resize(maxCap);
+        this->child_index.resize(maxCap, INT_MIN);
         this->child_bounds.resize(maxCap);
 
         for (int i = 0; i < child_bounds.size(); i++)
@@ -85,7 +66,12 @@ public:
         }
     }
 
-    void set_left_bounds(MBR *m)
+    void setBounds(MBR *m)
+    {
+        this->bounds = m;
+    }
+
+    void setLeftBounds(MBR *m)
     {
         for (int i = 0; i < m->mbr.size(); i++)
         {
@@ -93,7 +79,7 @@ public:
         }
     }
 
-    void set_right_bounds(MBR *m)
+    void setRightBounds(MBR *m)
     {
         for (int i = 0; i < m->mbr.size(); i++)
         {
@@ -101,7 +87,7 @@ public:
         }
     }
 
-    bool is_leaf()
+    bool isLeaf()
     {
         if (this->child_index[0] == -1)
             return true;
@@ -126,11 +112,96 @@ public:
     }
 };
 
-void delete_point(Point *p)
+
+
+
+// store node in char* data
+Node *extract_node(char *data)
 {
-    p->pt.clear();
-    p->pt.shrink_to_fit();
-    delete (p);
+    Node *n = new Node();
+    // assign all values to node variables
+    n->index = *(int *)(data);
+    data += sizeof(int);
+    n->parent_index = *(int *)(data);
+    data += 4;
+    for (int i = 0; i < n->bounds->mbr.size(); i++)
+    {
+        n->bounds->mbr[i].first = *(int *)(data);
+        data += sizeof(int);
+    }
+    for (int i = 0; i < n->bounds->mbr.size(); i++)
+    {
+        n->bounds->mbr[i].second = *(int *)(data);
+        data += sizeof(int);
+    }
+
+    for (int i = 0; i < n->child_index.size(); i++)
+    {
+        n->child_index[i] = *(int *)(data);
+        data += sizeof(int);
+        for (int j = 0; j < d; j++)
+        {
+            n->child_bounds[i]->mbr[j].first = *(int *)(data);
+            data += sizeof(int);
+        }
+        for (int j = 0; j < d; j++)
+        {
+            n->child_bounds[i]->mbr[j].second = *(int *)(data);
+            data += sizeof(int);
+        }
+    }
+    return n;
+}
+
+// This function is to copy data from node to the memory
+void copy_data(Node *n, char *data)
+{
+    cout << "Copy start" << endl;
+    memcpy(data, &n->index, sizeof(int));
+    data += sizeof(int);
+    memcpy(data, &n->parent_index, sizeof(int));
+    data += sizeof(int);
+    cout << "Copy mid1" << endl;
+    for (int i = 0; i < n->bounds->mbr.size(); i++)
+    {
+        memcpy(data, &n->bounds->mbr[i].first, sizeof(int));
+        data += sizeof(int);
+    }
+    cout << "Copy mid2" << endl;
+    for (int i = 0; i < n->bounds->mbr.size(); i++)
+    {
+        memcpy(data, &n->bounds->mbr[i].second, sizeof(int));
+        data += sizeof(int);
+    }
+    cout << "Copy mid3" << endl;
+    for (int i = 0; i < n->child_index.size(); i++)
+    {
+        cout << "Copy mid4" << endl;
+        memcpy(data, &n->child_index[i], sizeof(int));
+        data += sizeof(int);
+        cout << "dimensionality: " << d << endl;
+        for (int j = 0; j < d; j++)
+        {
+            cout << "Copy mid5" << endl;
+            memcpy(data, &n->child_bounds[i]->mbr[j].first, sizeof(int));
+            data += sizeof(int);
+        }
+        cout << "Copy mid6" << endl;
+        for (int j = 0; j < d; j++)
+        {
+            memcpy(data, &n->child_bounds[i]->mbr[j].second, sizeof(int));
+            data += sizeof(int);
+        }
+    }
+    cout << "Copy end" << endl;
+}
+
+Node *get_node(char *data, int node_id)
+{
+    while (*((int *)(data)) != node_id)
+        data += NodeSize;
+
+    return extract_node(data);
 }
 
 void delete_mbr(MBR *m)
@@ -139,6 +210,7 @@ void delete_mbr(MBR *m)
     m->mbr.shrink_to_fit();
     delete (m);
 }
+
 
 void delete_node(Node *n)
 {
@@ -154,135 +226,80 @@ void delete_node(Node *n)
     delete (n);
 }
 
-// store node in char* data
-Node *extract_node(char *data)
-{
-    Node *n = new Node();
-    // assign all values to node variables
-    n->index = *(int *)(data);
-    data += 4;
-    n->parent_index = *(int *)(data);
-    data += 4;
-    for (int i = 0; i < n->bounds->mbr.size(); i++)
-    {
-        n->bounds->mbr[i].first = *(int *)(data);
-        data += 4;
-    }
-    for (int i = 0; i < n->bounds->mbr.size(); i++)
-    {
-        n->bounds->mbr[i].second = *(int *)(data);
-        data += 4;
-    }
-
-    for (int i = 0; i < n->child_index.size(); i++)
-    {
-        n->child_index[i] = *(int *)(data);
-        data += 4;
-        for (int j = 0; j < d; i++)
-        {
-            n->child_bounds[i]->mbr[j].first = *(int *)(data);
-            data += 4;
-        }
-        for (int j = 0; j < d; i++)
-        {
-            n->child_bounds[i]->mbr[j].second = *(int *)(data);
-            data += 4;
-        }
-    }
-    return n;
-}
-
-// This function is to copy data from node to the memory
-void copy_data(Node *n, char *data)
-{
-    memcpy(data, &n->index, sizeof(int));
-    data += sizeof(int);
-    memcpy(data, &n->parent_index, sizeof(int));
-    data += sizeof(int);
-    for (int i = 0; i < n->bounds->mbr.size(); i++)
-    {
-        memcpy(data, &n->bounds->mbr[i].first, sizeof(int));
-        data += sizeof(int);
-    }
-    for (int i = 0; i < n->bounds->mbr.size(); i++)
-    {
-        memcpy(data, &n->bounds->mbr[i].second, sizeof(int));
-        data += sizeof(int);
-    }
-    for (int i = 0; i < n->child_index.size(); i++)
-    {
-        memcpy(data, &n->child_index[i], sizeof(int));
-        data += sizeof(int);
-        for (int j = 0; j < d; i++)
-        {
-            memcpy(data, &n->child_bounds[i]->mbr[j].first, sizeof(int));
-            data += sizeof(int);
-        }
-        for (int j = 0; j < d; i++)
-        {
-            memcpy(data, &n->child_bounds[i]->mbr[j].second, sizeof(int));
-            data += 4;
-        }
-    }
-}
-
-Node *get_node(char *data, int node_id)
-{
-    while (*((int *)(data)) != node_id)
-        data += NodeSize;
-
-    return extract_node(data);
-}
-
 void assignParents(int start, int end, FileManager &fm, FileHandler &fh)
 {
     // N = Number of nodes bytes to be inserted into the tree
     int N = end - start;
     int numNodes = 0;
     int startPageNumber, endPageNumber;
-
+    cout << "assign 1" << endl;
     try
     {
         // startPage tells the page to look at for data
         int startPage = start / (PAGE_CONTENT_SIZE / NodeSize);
+        cout << "assign 2" << endl;
 
-        PageHandler startPageHandler = fh.PageAt(startPage);
-        PageHandler endPageHandler = fh.LastPage();
+        // PageHandler startPageHandler = fh.PageAt(startPage);
+        // PageHandler endPageHandler = fh.LastPage();
 
-        // pointers to current data read location and last data read location
+        // // pointers to current data read location and last data read location
+        // char *startData, *endData;
+
+        // startData = startPageHandler.GetData();
+        // endData = endPageHandler.GetData();
+        // endData += endPageOffset;
+
+        // startPageNumber = startPageHandler.GetPageNum();
+        // endPageNumber = endPageHandler.GetPageNum();
+
+        // fh.MarkDirty(startPageNumber);
+        // fh.MarkDirty(endPageNumber);
+
+
         char *startData, *endData;
-
+        PageHandler startPageHandler = fh.PageAt(startPage);
         startData = startPageHandler.GetData();
-        endData = endPageHandler.GetData();
-        endData += endPageOffset;
-
         startPageNumber = startPageHandler.GetPageNum();
-        endPageNumber = endPageHandler.GetPageNum();
-
         fh.MarkDirty(startPageNumber);
+
+        PageHandler endPageHandler = fh.LastPage();
+        endPageNumber = endPageHandler.GetPageNum();
         fh.MarkDirty(endPageNumber);
+
+        endData = endPageHandler.GetData();
+        endData = endData + endPageOffset;
 
         int offsetData = 0;
         while (*((int *)(startData)) != start)
         {
+            cout << "assign 3" << endl;
             startData += NodeSize;
             offsetData += NodeSize;
         }
 
         while (N > 0)
         {
+            cout << "assign 4" << endl;
             Node *newNode = new Node();
             newNode->index = focusIndex;
             focusIndex += 1;
 
             int nodeCount = 0;
 
-            MBR *newBounds = new MBR(d);            
+            MBR *newBounds = new MBR(d);
+            for (int i = 0; i < d; i++)
+            {
+                cout << "assign 5" << endl;
+                newBounds->mbr[i].first = INT_MAX;
+                newBounds->mbr[i].second = INT_MIN;
+            }
 
             while (N > 0 && maxCap > nodeCount)
             {
+                cout << "assign 6" << endl;
                 if (PAGE_CONTENT_SIZE - NodeSize < offsetData)
                 {
+                    cout << "assign 6.1" << endl;
                     fh.UnpinPage(startPageNumber);
 
                     startPageHandler = fh.NextPage(startPageNumber);
@@ -292,34 +309,35 @@ void assignParents(int start, int end, FileManager &fm, FileHandler &fh)
                     startData = startPageHandler.GetData();
                     offsetData = 0;
                 }
+                cout << "assign 6.2" << endl;
 
                 Node *copyNode = extract_node(startData);
-                memcpy((startData + 4), &newNode->index, sizeof(int));
-
-                startData = NodeSize + startData;
-                offsetData = NodeSize + offsetData;
+                cout << "assign 6.3" << endl;
+                memcpy((startData + sizeof(int)), &newNode->index, sizeof(int));
 
                 copyNode->parent_index = newNode->index;
 
                 newNode->child_index[nodeCount] = copyNode->index;
 
+                startData = NodeSize + startData;
+                offsetData = NodeSize + offsetData;
                 for (int i = 0; i < d; i++)
                 {
+                    cout << "assign 6.4" << endl;
                     newNode->child_bounds[nodeCount]->mbr[i].first = copyNode->bounds->mbr[i].first;
                     newNode->child_bounds[nodeCount]->mbr[i].second = copyNode->bounds->mbr[i].second;
 
                     newBounds->mbr[i].first = min(newBounds->mbr[i].first, newNode->child_bounds[nodeCount]->mbr[i].first);
-                    newBounds->mbr[i].second = min(newBounds->mbr[i].second, newNode->child_bounds[nodeCount]->mbr[i].second);
+                    newBounds->mbr[i].second = max(newBounds->mbr[i].second, newNode->child_bounds[nodeCount]->mbr[i].second);
                 }
-
-                nodeCount++;
                 N--;
-
+                nodeCount++;
                 delete_node(copyNode);
             }
-
-            newNode->set_left_bounds(newBounds);
-            newNode->set_right_bounds(newBounds);
+            cout << "assign 7" << endl;
+            // newNode->setLeftBounds(newBounds);
+            // newNode->setRightBounds(newBounds);
+            newNode->setBounds(newBounds);
 
             if (PAGE_CONTENT_SIZE - NodeSize < endPageOffset)
             {
@@ -332,6 +350,7 @@ void assignParents(int start, int end, FileManager &fm, FileHandler &fh)
                 endPageOffset = 0;
             }
 
+            cout << "assign 8" << endl;
             copy_data(newNode, endData);
             endData += NodeSize;
             endPageOffset += NodeSize;
@@ -348,7 +367,7 @@ void assignParents(int start, int end, FileManager &fm, FileHandler &fh)
     fh.UnpinPage(startPageNumber);
     fh.UnpinPage(endPageNumber);
     fh.FlushPages();
-
+    cout << "assign 9" << endl;
     if (numNodes == 1)
     {
         rootIndex = focusIndex - 1;
@@ -366,9 +385,11 @@ void bulkLoad(int n, FileManager &fm, FileHandler &startFileHandler, FileHandler
     int startPageNumber, endPageNumber;
     int N = n;
 
+
     int numNodes = 0;
     try
     {
+
         char *startData, *endData;
 
         PageHandler startPageHandler = startFileHandler.FirstPage();
@@ -384,6 +405,7 @@ void bulkLoad(int n, FileManager &fm, FileHandler &startFileHandler, FileHandler
         int pageOffset = 0;
         while (N > 0)
         {
+
             Node *newNode = new Node();
             newNode->index = focusIndex;
             focusIndex += 1;
@@ -392,10 +414,19 @@ void bulkLoad(int n, FileManager &fm, FileHandler &startFileHandler, FileHandler
 
             MBR *newBounds = new MBR(d);
 
+            for(int i=0;i<d;i++){
+                newBounds->mbr[i].first = INT_MAX;
+                newBounds->mbr[i].second = INT_MIN;
+            }
+
+
+
             while (N > 0 && maxCap > nodeCount)
             {
+
                 if (PAGE_CONTENT_SIZE - (d * sizeof(int)) < pageOffset)
                 {
+
                     startFileHandler.UnpinPage(startPageNumber);
                     startPageHandler = startFileHandler.NextPage(startPageNumber);
 
@@ -405,24 +436,35 @@ void bulkLoad(int n, FileManager &fm, FileHandler &startFileHandler, FileHandler
                     pageOffset = 0;
                 }
 
+
                 newNode->child_index[nodeCount] = -1;
                 for (int i = 0; i < d; i++)
                 {
+
                     newNode->child_bounds[nodeCount]->mbr[i].first = *(int *)(startData);
                     newNode->child_bounds[nodeCount]->mbr[i].second = INT_MIN;
                     startData += sizeof(int);
                     pageOffset += sizeof(int);
 
                     newBounds->mbr[i].first = min(newBounds->mbr[i].first, newNode->child_bounds[nodeCount]->mbr[i].first);
-                    newBounds->mbr[i].second = max(newBounds->mbr[i].second, newNode->child_bounds[nodeCount]->mbr[i].second);
+                    newBounds->mbr[i].second = max(newBounds->mbr[i].second, newNode->child_bounds[nodeCount]->mbr[i].first);
                 }
 
                 nodeCount++;
                 N--;
             }
 
-            newNode->set_left_bounds(newBounds);
-            newNode->set_right_bounds(newBounds);
+            newNode->setBounds(newBounds);
+            // for(int i=0;i<d;i++){
+            //     cerr << "Go check 2nd value " << newNode->bounds->mbr[i].second << endl;
+            // }
+            // check if mbr value is correctly set
+            for(int i=0;i<d;i++){
+                if(newBounds->mbr[i].first != newNode->bounds->mbr[i].first || newBounds->mbr[i].second != newNode->bounds->mbr[i].second)
+                    assert(0);
+            }
+            // newNode->setLeftBounds(newBounds);
+            // newNode->setRightBounds(newBounds);
 
             if (PAGE_CONTENT_SIZE - NodeSize < endPageOffset)
             {
@@ -437,13 +479,13 @@ void bulkLoad(int n, FileManager &fm, FileHandler &startFileHandler, FileHandler
                 endPageOffset = 0;
             }
 
+
             copy_data(newNode, endData);
-            endData += NodeSize;
-
-            endPageOffset += NodeSize;
-            numNodes++;
-
             delete_node(newNode);
+            numNodes += 1;
+            endData += NodeSize;
+            endPageOffset += NodeSize;
+
         }
     }
     catch (InvalidPageException)
@@ -456,6 +498,7 @@ void bulkLoad(int n, FileManager &fm, FileHandler &startFileHandler, FileHandler
 
     startFileHandler.FlushPages();
     endFileHandler.FlushPages();
+
 
     assignParents(0, numNodes, fm, endFileHandler);
 }
@@ -476,7 +519,7 @@ MBR *new_area_mbr(MBR *a, MBR *b)
 MBR *point_mbr(vector<int> v)
 {
     MBR *m = new MBR();
-    for (int i = 0; i < v.size(); i++)
+    for (int i = 0; i < m->mbr.size(); i++)
     {
         m->mbr[i].first = v[i];
         m->mbr[i].second = v[i];
@@ -495,7 +538,7 @@ MBR *new_area_point(MBR *a, vector<int> p)
 long int get_area(MBR *m)
 {
     long int area = 1;
-    for (int i = 0; i < m->mbr.size(); i++)
+    for (int i = 0; i < d; i++)
     {
         area *= (m->mbr[i].second - m->mbr[i].first);
     }
@@ -523,6 +566,14 @@ bool is_equal(MBR *a, MBR *b)
     return true;
 }
 
+void print_mbr(MBR *m){
+    cerr << "Printing MBR \n";
+    for(int i=0;i<m->mbr.size();i++){
+        cerr << m->mbr[i].first << " " << m->mbr[i].second << "\n";
+    }
+    return;
+}
+
 bool search(vector<int> &P, FileHandler &fh, int index)
 {
     int page_id = index / (PAGE_CONTENT_SIZE / NodeSize);
@@ -530,12 +581,26 @@ bool search(vector<int> &P, FileHandler &fh, int index)
     char *data = ph.GetData();
     Node *n = get_node(data, index);
 
-    if (n->is_leaf())
+    if (n->isLeaf())
     {
         for (int i = 0; i < maxCap; i++)
         {
             MBR *m = point_mbr(P);
-            if (is_equal(m, n->child_bounds[i]))
+            int is_same = 1;
+            // for(int j=0;j<m->mbr.size(); j++){
+            for(int j=0;j<P.size(); j++){
+                // if((m->mbr[j].first != n->child_bounds[i]->mbr[j].first))
+                if((P[j] != n->child_bounds[i]->mbr[j].first))
+                {
+                    // cerr << "Some print\n";
+                    // cerr << P[j] << " " << n->child_bounds[i]->mbr[j].first << endl; 
+                    is_same = 0;
+                    break; 
+                }
+            }
+            // cerr << "IS same " << is_same << endl;
+            // if (is_equal(m, n->child_bounds[i]))
+            if(is_same == 1)
             {
                 delete_mbr(m);
                 delete_node(n);
@@ -552,12 +617,30 @@ bool search(vector<int> &P, FileHandler &fh, int index)
     {
         for (int i = 0; i < maxCap; i++)
         {
-            if (n->child_index[i] == INT_MIN)
+            if (n->child_index[i] == INT_MIN){
+                // cerr << "Goes to min value\n";
                 break;
+            }
 
             MBR *m = point_mbr(P);
-            if (belongs(m, n->bounds))
+            // cerr << "Print mbr m\n";
+            // print_mbr(m);
+            // cerr << "Print mbr n bounds\n";
+            // print_mbr(n->child_bounds[i]);
+            int is_belong = 1;
+            // cerr << "Random text\n";
+            for(int k=0;k<m->mbr.size();k++){
+                if((m->mbr[k].first < n->child_bounds[i]->mbr[k].first) || (m->mbr[k].first > n->child_bounds[i]->mbr[k].second))
+                {
+                    // cerr << m->mbr[k].first << "   " << n->child_bounds[i]->mbr[k].first << "  " << n->child_bounds[i]->mbr[k].second << "\n";
+                    is_belong = 0;
+                    break;
+                }
+            }
+            // if (belongs(m, n->child_bounds[i]))
+            if(is_belong == 1)
             {
+                // cerr << "Search 3.1" << endl;
                 if (search(P, fh, n->child_index[i]))
                 {
                     delete_mbr(m);
@@ -566,6 +649,7 @@ bool search(vector<int> &P, FileHandler &fh, int index)
                     return true;
                 }
             }
+            // cerr << "Search 3.2\n";
             delete_mbr(m);
         }
     }
@@ -574,21 +658,89 @@ bool search(vector<int> &P, FileHandler &fh, int index)
     return false;
 }
 
-void add_point(int leaf_id, char *data, MBR *new_mbr, MBR *m)
+int main(int argc, char *argv[])
 {
-	while(*(int *)(data) != leaf_id)
-		data += NodeSize;
-	
-	data = data + 2*sizeof(int);
-	// for(int i=0;i<)
-}
+    cout << "HERE\n";
+    FileManager fm;
+    FileHandler startFileHandler, endFileHandler;
+    string input;
 
+    ifstream infile(argv[1]);
+    d = stoi(argv[2]);
+    maxCap = stoi(argv[3]);
 
+    try
+    {
+        endFileHandler = fm.CreateFile("answer.txt");
+    }
+    catch (InvalidPageException)
+    {
+        fm.DestroyFile("answer.txt");
+        endFileHandler = fm.CreateFile("answer.txt");
+    }
 
+    ofstream outfile(argv[4]);
 
+    // NOTE : sizeof(pair<int,int>) = sizeof(int)*2
+    NodeSize = (1 + 1 + 2 * d + maxCap + 2 * d * maxCap) * sizeof(int);
 
+    while (getline(infile, input))
+    {
+        int position = input.find(" ");
+        string command = input.substr(0, position);
+        input.erase(0, position + 1);
 
-int main()
-{
-    cout << "None" << endl;
+        if (command == "BULKLOAD")
+        {
+            position = input.find(" ");
+            string inputfile = input.substr(0, position);
+            cout << inputfile << endl;
+            startFileHandler = fm.OpenFile(inputfile.c_str());
+            input.erase(0, 1 + position);
+
+            position = input.find(" ");
+            int N = stoi(input.substr(0, position));
+            input.erase(0, 1 + position);
+
+            bulkLoad(N, fm, startFileHandler, endFileHandler);
+            cout << "Bulkload3" << endl;
+
+            outfile << "BULKLOAD\n\n";
+
+            fm.CloseFile(startFileHandler);
+            cout << "Bulkload4" << endl;
+        }
+        else if (command == "QUERY")
+        {
+            cout << "Query" << endl;
+            vector<int> searchPoint;
+            for (int i = 0; i < d; i++)
+            {
+                position = input.find(" ");
+                searchPoint.push_back(stoi(input.substr(0, position)));
+                input.erase(0, 1 + position);
+            }
+            if (search(searchPoint, endFileHandler, rootIndex))
+            {
+                outfile << "TRUE" << endl;
+                cerr << "TRUE" << endl;
+            }
+            else
+            {
+                cerr << "False" << endl;
+                outfile << "FALSE" << endl;
+            }
+
+            endFileHandler.FlushPages();
+            outfile << endl;
+        }
+    }
+
+    fm.CloseFile(endFileHandler);
+    fm.DestroyFile("answer.txt");
+
+    infile.close();
+    outfile.close();
+
+    return (0);
 }
