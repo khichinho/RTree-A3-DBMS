@@ -492,6 +492,53 @@ bool is_equal(MBR *a, MBR *b)
     return true;
 }
 
+int getLeafIndex(FileHandler &fileHandler, vector<int> &Point, int nodeIndex)
+{
+    PageHandler pageHandler = fileHandler.PageAt((nodeIndex / (PAGE_CONTENT_SIZE / NodeSize)));
+    char *data = pageHandler.GetData();
+
+    Node *leafNode = getNode(data, nodeIndex);
+
+    if (leafNode->childIndex[0] != -1)
+    {
+        int childIndexStore = -1;
+        int minimumVal = INT_MAX;
+        for (int i = 0; i < maxCap; i++)
+        {
+            if (leafNode->childIndex[i] != INT_MIN)
+            {
+                long long int nodeVolume = boundsHyperVolume(leafNode->child_bounds[i]);
+                long long int val = boundsHyperVolume(new_area_point(leafNode->child_bounds[i], Point)) - nodeVolume;
+
+                if (minimumVal > val)
+                {
+                    minimumVal = val;
+                    childIndexStore = i;
+                }
+                else if (minimumVal == val)
+                {
+                    long long int nodeVolumeSecond = boundsHyperVolume(leafNode->child_bounds[childIndexStore]);
+                    if (nodeVolumeSecond > nodeVolume)
+                    {
+                        childIndexStore = i;
+                    }
+                }
+            }
+            else
+            {
+                continue;
+            }
+        }
+
+        fileHandler.UnpinPage(pageHandler.GetPageNum());
+        return (getLeafIndex(fileHandler, Point, leafNode->childIndex[childIndexStore]));
+    }
+    else
+    {
+        return (nodeIndex);
+    }
+}
+
 void print_mbr(MBR *m)
 {
     cout << "Printing MBR \n";
@@ -697,6 +744,194 @@ long long int eucledianDistance(MBR *a, MBR *b)
         distance += (a->mbr[i].second - b->mbr[i].second) * (a->mbr[i].second - b->mbr[i].second);
     }
     return distance;
+}
+
+Node *splitLeafNode(FileHandler &fileHandler, char *data, int nodeIndex, MBR *a)
+{
+    Node *newNode = getNode(data, nodeIndex);
+    int orignalIndex = newNode->index;
+    vector<MBR *> newChildBounds = newNode->child_bounds;
+
+    a->mbr.resize(d, make_pair(INT_MIN, INT_MIN));
+    newChildBounds.push_back(a);
+
+    int newParentIndex = newNode->parent_index;
+    int n1, n2 = -1;
+    MBR *nb1, *nb2;
+    vector<int> nc1, nc2;
+    long long int diagonal = LONG_MIN;
+
+    for (int i = 0; i < newChildBounds.size(); i++)
+    {
+        for (int j = i + 1; j < newChildBounds.size(); j++)
+        {
+            long long distance = eucledianDistance(newChildBounds[i], newChildBounds[j]);
+            if (diagonal < distance)
+            {
+                n1 = i;
+                n2 = j;
+                diagonal = distance;
+            }
+        }
+    }
+
+    for (int i = 0; i < d; i++)
+    {
+        nb1->mbr.push_back(newChildBounds[n1]->mbr[i]);
+        nb2->mbr.push_back(newChildBounds[n2]->mbr[i]);
+    }
+    for (int i = 0; i < d; i++)
+    {
+        nb1->mbr.push_back(nb1->mbr[i]);
+        nb2->mbr.push_back(nb2->mbr[i]);
+    }
+
+    int nodeCount = 0;
+    for (int i = 0; i < newChildBounds.size(); i++)
+    {
+        long long int hyperVol1 = boundsHyperVolume(nb1);
+        long long int hyperVol2 = boundsHyperVolume(nb2);
+
+        MBR *b1 = new_area_mbr(nb1, newChildBounds[i]);
+        MBR *b2 = new_area_mbr(nb2, newChildBounds[i]);
+
+        long long int newHyperVol1 = boundsHyperVolume(b1) - hyperVol1;
+        long long int newHyperVol2 = boundsHyperVolume(b2) - hyperVol2;
+
+        nodeCount += 1;
+        if (newHyperVol1 > newHyperVol2)
+        {
+            nc2.push_back(i);
+            nb2 = b2;
+        }
+        else if (newHyperVol1 < newHyperVol2)
+        {
+            nc1.push_back(i);
+            nb1 = b1;
+        }
+        else
+        {
+            if (hyperVol1 < hyperVol2)
+            {
+                nc1.push_back(i);
+                nb1 = b1;
+            }
+            else if (hyperVol1 > hyperVol2)
+            {
+                nc2.push_back(i);
+                nb2 = b2;
+            }
+            else
+            {
+                if (nc1.size() < nc2.size())
+                {
+                    nc1.push_back(i);
+                    nb1 = b1;
+                }
+                else
+                {
+                    nc2.push_back(i);
+                    nb2 = b2;
+                }
+            }
+        }
+
+        if (newChildBounds.size() - nodeCount == int(ceil((float)maxCap / 2.0)) - nc1.size())
+        {
+            for (int j = i + 1; j < newChildBounds.size(); j++)
+            {
+                MBR *b1 = new_area_mbr(nb1, newChildBounds[j]);
+                nc1.push_back(j);
+                nb1 = b1;
+            }
+            break;
+        }
+        if (newChildBounds.size() - nodeCount == int(ceil((float)maxCap / 2.0)) - nc2.size())
+        {
+            for (int j = i + 1; j < newChildBounds.size(); j++)
+            {
+                MBR *b2 = new_area_mbr(nb2, newChildBounds[j]);
+                nc2.push_back(j);
+                nb2 = b2;
+            }
+            break;
+        }
+    }
+    newNode->bounds = nb1;
+
+    for (int i = 0; i < maxCap; i++)
+    {
+        if (nc1.size() > i)
+        {
+            newNode->child_bounds[i] = newChildBounds[nc1[i]];
+            newNode->childIndex[i] = -1;
+        }
+        else
+        {
+            newNode->child_bounds[i] = new MBR(d);
+            newNode->childIndex[i] = INT_MIN;
+        }
+    }
+
+    Node *newerNode = new Node();
+    newerNode->bounds = nb2;
+    newerNode->index = focusIndex++;
+    newerNode->parent_index = newParentIndex;
+
+    for (int i = 0; i < maxCap; i++)
+    {
+        if (i < nc2.size())
+        {
+            newerNode->child_bounds[i] = newChildBounds[nc2[i]];
+            newerNode->childIndex[i] = -1;
+        }
+        else
+        {
+            newNode->child_bounds[i] = new MBR(d);
+            newNode->childIndex[i] = INT_MIN;
+        }
+    }
+
+    if (newParentIndex == -1)
+    {
+        Node *rootNode = new Node();
+
+        rootNode->index = focusIndex++;
+        rootNode->parent_index = -1;
+        rootIndex = rootNode->index;
+
+        MBR *bnds = new_area_mbr(nb1, nb2);
+
+        rootNode->bounds = bnds;
+        rootNode->childIndex[0] = newNode->index;
+        rootNode->child_bounds[0] = newNode->bounds;
+
+        newerNode->parent_index = rootIndex;
+        newNode->parent_index = rootIndex;
+
+        addSplitNode(fileHandler, newerNode);
+
+        while (*(int *)(data) != newNode->index)
+        {
+            data += NodeSize;
+        }
+        copy_data(newNode, data);
+
+        addSplitNode(fileHandler, rootNode);
+        deleteNode(rootNode);
+        return (newerNode);
+    }
+
+    while (*(int *)(data) != newNode->index)
+    {
+        data += NodeSize;
+    }
+    copy_data(newNode, data);
+
+    updateMBR(fileHandler, newNode->parent_index, newNode->bounds, newNode->index, true);
+    addSplitNode(fileHandler, newerNode);
+    deleteNode(newNode);
+    return (newerNode);
 }
 
 Node *splitInternal(FileHandler &fileHandler, char *data, int nodeIndex, Node *node)
@@ -927,9 +1162,77 @@ void updateNode(FileHandler &fileHandler, int nodeParentIndex, Node *node)
     fileHandler.UnpinPage(pageHandler.GetPageNum());
 }
 
-void insertNode(FileHandler &FileHandler, FileManager &fm, vector<int> &Point, int nodeIndex)
+void insertNode(FileHandler &fileHandler, FileManager &fm, vector<int> &Point, int nodeIndex)
 {
+    int leafIndex = getLeafIndex(fileHandler, Point, nodeIndex);
+    fileHandler.FlushPages();
+
+    PageHandler PageHandler = fileHandler.PageAt(leafIndex / (PAGE_CONTENT_SIZE / NodeSize));
+
+    fileHandler.MarkDirty(PageHandler.GetPageNum());
+
+    char *data = PageHandler.GetData();
+    Node *newNode = getNode(data, leafIndex);
+
+    if (newNode->childIndex[maxCap - 1] == INT_MIN)
+    {
+        MBR *newBounds = new_area_point(newNode->bounds, Point);
+
+        int num = -1;
+
+        while (*(int *)(data) != leafIndex)
+        {
+            data += NodeSize;
+        }
+
+        data += 8;
+
+        for (int i = 0; i < d; i++)
+        {
+            num = newBounds->mbr[i].first;
+            memcpy(data, &num, 4);
+            data += 4;
+        }
+        for (int i = 0; i < d; i++)
+        {
+            num = newBounds->mbr[i].second;
+            memcpy(data, &num, 4);
+            data += 4;
+        }
+
+        while (*(int *)(data) != INT_MIN)
+        {
+            data += (sizeof(int) + sizeof(int) * 2 * d);
+        }
+
+        memcpy(data, &num, 4);
+        data += 4;
+
+        for (int i = 0; i < d; i++)
+        {
+            memcpy(data, &Point[i], 4);
+            data += 4;
+        }
+
+        fileHandler.UnpinPage(PageHandler.GetPageNum());
+        fileHandler.FlushPage(PageHandler.GetPageNum());
+
+        updateMBR(fileHandler, newNode->parent_index, newBounds, leafIndex, true);
+    }
+    else
+    {
+        Node *newerNode = splitLeafNode(fileHandler, data, leafIndex, point_mbr(Point));
+
+        fileHandler.UnpinPage(PageHandler.GetPageNum());
+        fileHandler.FlushPage(PageHandler.GetPageNum());
+
+        updateNode(fileHandler, newerNode->parent_index, newerNode);
+        delete (newerNode);
+    }
+
+    fileHandler.FlushPages();
 }
+
 int main(int argc, char *argv[])
 {
     FileManager fm;
@@ -973,9 +1276,51 @@ int main(int argc, char *argv[])
 
             bulkLoad(N, fm, startFileHandler, endFileHandler);
 
-            myfile << "BULKLOAD\n\n";
+            myfile << "BULKLOAD\n\n\n";
 
             fm.CloseFile(startFileHandler);
+        }
+        else if (command == "INSERT")
+        {
+            vector<int> Point;
+            for (int i = 0; i < d; i++)
+            {
+                position = input.find(" ");
+                Point.push_back(stoi(input.substr(0, position)));
+                input.erase(0, 1 + position);
+            }
+
+            if (rootIndex == -1)
+            {
+                PageHandler pageHandler = endFileHandler.NewPage();
+
+                char *data = pageHandler.GetData();
+                Node *newNode = new Node();
+
+                newNode->childIndex[0] = -1;
+                newNode->index = focusIndex++;
+                newNode->parent_index = -1;
+
+                for (int i = 0; i < d; i++)
+                {
+                    newNode->bounds->mbr[i].first = Point[i];
+                    newNode->bounds->mbr[i].second = Point[i];
+                    newNode->child_bounds[0]->mbr[i].first = Point[i];
+                }
+                rootIndex = 0;
+
+                copy_data(newNode, data);
+                endFileHandler.UnpinPage(pageHandler.GetPageNum());
+                endFileHandler.FlushPage(pageHandler.GetPageNum());
+            }
+            else
+            {
+                insertNode(endFileHandler, fm, Point, rootIndex);
+            }
+
+            myfile << "INSERT\n\n\n";
+
+            endFileHandler.FlushPages();
         }
         else if (command == "QUERY")
         {
