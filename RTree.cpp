@@ -49,22 +49,22 @@ class Node
 {
 public:
     int index;
-    int parent_index;
+    int parentIndex;
     MBR *bounds;
-    vector<int> child_index;
-    vector<MBR *> child_bounds;
+    vector<int> childIndices;
+    vector<MBR *> childBounds;
 
     Node()
     {
         this->index = -1;
-        this->parent_index = -1;
+        this->parentIndex = -1;
         this->bounds = new MBR(d);
-        this->child_index.resize(maxCap, INT_MIN);
-        this->child_bounds.resize(maxCap);
+        this->childIndices.resize(maxCap, INT_MIN);
+        this->childBounds.resize(maxCap);
 
-        for (int i = 0; i < child_bounds.size(); i++)
+        for (int i = 0; i < childBounds.size(); i++)
         {
-            this->child_bounds[i] = new MBR(d);
+            this->childBounds[i] = new MBR(d);
         }
     }
 
@@ -91,7 +91,7 @@ public:
 
     bool isLeaf()
     {
-        return (this->child_index[0] == -1);
+        return (this->childIndices[0] == -1);
     }
 };
 
@@ -105,7 +105,7 @@ Node *extractNodeData(char *data)
     data += 4;
 
     // assign all parent_indexes to node variables
-    node->parent_index = *(int *)(data);
+    node->parentIndex = *(int *)(data);
     data += 4;
     for (int i = 0; i < node->bounds->mbr.size(); i++)
     {
@@ -118,18 +118,18 @@ Node *extractNodeData(char *data)
         data += 4;
     }
 
-    for (int i = 0; i < node->child_index.size(); i++)
+    for (int i = 0; i < node->childIndices.size(); i++)
     {
-        node->child_index[i] = *(int *)(data);
+        node->childIndices[i] = *(int *)(data);
         data += 4;
         for (int j = 0; j < d; j++)
         {
-            node->child_bounds[i]->mbr[j].first = *(int *)(data);
+            node->childBounds[i]->mbr[j].first = *(int *)(data);
             data += 4;
         }
         for (int j = 0; j < d; j++)
         {
-            node->child_bounds[i]->mbr[j].second = *(int *)(data);
+            node->childBounds[i]->mbr[j].second = *(int *)(data);
             data += 4;
         }
     }
@@ -141,7 +141,7 @@ void copyNodeData(Node *node, char *data)
 {
     memcpy(data, &node->index, 4);
     data += 4;
-    memcpy(data, &node->parent_index, 4);
+    memcpy(data, &node->parentIndex, 4);
     data += 4;
     for (int i = 0; i < node->bounds->mbr.size(); i++)
     {
@@ -154,25 +154,25 @@ void copyNodeData(Node *node, char *data)
         data += 4;
     }
     int i = 0;
-    while (i < node->child_index.size())
+    while (i < node->childIndices.size())
     {
-        memcpy(data, &node->child_index[i], 4);
+        memcpy(data, &node->childIndices[i], 4);
         data += 4;
         for (int j = 0; j < d; j++)
         {
-            memcpy(data, &node->child_bounds[i]->mbr[j].first, 4);
+            memcpy(data, &node->childBounds[i]->mbr[j].first, 4);
             data += 4;
         }
         for (int j = 0; j < d; j++)
         {
-            memcpy(data, &node->child_bounds[i]->mbr[j].second, 4);
+            memcpy(data, &node->childBounds[i]->mbr[j].second, 4);
             data += 4;
         }
         i++;
     }
 }
 
-Node *get_node(char *data, int node_id)
+Node *getNodeData(char *data, int node_id)
 {
     while (*((int *)(data)) != node_id)
         data += NodeSize;
@@ -180,24 +180,24 @@ Node *get_node(char *data, int node_id)
     return extractNodeData(data);
 }
 
-void delete_mbr(MBR *m)
+void deleteBounds(MBR *m)
 {
     m->mbr.clear();
     m->mbr.shrink_to_fit();
     delete (m);
 }
 
-void delete_node(Node *n)
+void deleteNode(Node *n)
 {
-    delete_mbr(n->bounds);
-    n->child_index.clear();
-    n->child_index.shrink_to_fit();
-    for (int i = 0; i < n->child_bounds.size(); i++)
+    deleteBounds(n->bounds);
+    n->childIndices.clear();
+    n->childIndices.shrink_to_fit();
+    for (int i = 0; i < n->childBounds.size(); i++)
     {
-        delete_mbr(n->child_bounds[i]);
+        deleteBounds(n->childBounds[i]);
     }
-    n->child_bounds.clear();
-    n->child_bounds.shrink_to_fit();
+    n->childBounds.clear();
+    n->childBounds.shrink_to_fit();
     delete (n);
 }
 
@@ -281,23 +281,23 @@ void assignParents(int start, int end, FileManager &fm, FileHandler &fh)
                 Node *copyNode = extractNodeData(startData);
                 memcpy((startData + sizeof(int)), &newNode->index, sizeof(int));
 
-                copyNode->parent_index = newNode->index;
+                copyNode->parentIndex = newNode->index;
 
-                newNode->child_index[nodeCount] = copyNode->index;
+                newNode->childIndices[nodeCount] = copyNode->index;
 
                 startData = NodeSize + startData;
                 offsetData = NodeSize + offsetData;
                 for (int i = 0; i < d; i++)
                 {
-                    newNode->child_bounds[nodeCount]->mbr[i].first = copyNode->bounds->mbr[i].first;
-                    newNode->child_bounds[nodeCount]->mbr[i].second = copyNode->bounds->mbr[i].second;
+                    newNode->childBounds[nodeCount]->mbr[i].first = copyNode->bounds->mbr[i].first;
+                    newNode->childBounds[nodeCount]->mbr[i].second = copyNode->bounds->mbr[i].second;
 
-                    newBounds->mbr[i].first = min(newBounds->mbr[i].first, newNode->child_bounds[nodeCount]->mbr[i].first);
-                    newBounds->mbr[i].second = max(newBounds->mbr[i].second, newNode->child_bounds[nodeCount]->mbr[i].second);
+                    newBounds->mbr[i].first = min(newBounds->mbr[i].first, newNode->childBounds[nodeCount]->mbr[i].first);
+                    newBounds->mbr[i].second = max(newBounds->mbr[i].second, newNode->childBounds[nodeCount]->mbr[i].second);
                 }
                 N--;
                 nodeCount++;
-                delete_node(copyNode);
+                deleteNode(copyNode);
             }
             newNode->setBounds(newBounds);
 
@@ -315,7 +315,7 @@ void assignParents(int start, int end, FileManager &fm, FileHandler &fh)
             }
             numNodes += 1;
             copyNodeData(newNode, endData);
-            delete_node(newNode);
+            deleteNode(newNode);
             endData += NodeSize;
             endPageOffset += NodeSize;
         }
@@ -380,15 +380,15 @@ void bulkLoad(int n, FileManager &fm, FileHandler &startFileHandler, FileHandler
                     startData = startPageHandler.GetData();
                 }
 
-                newNode->child_index[nodeCount] = -1;
+                newNode->childIndices[nodeCount] = -1;
                 for (int i = 0; i < d; i++)
                 {
-                    newNode->child_bounds[nodeCount]->mbr[i].first = *(int *)(startData);
-                    newNode->child_bounds[nodeCount]->mbr[i].second = INT_MIN;
+                    newNode->childBounds[nodeCount]->mbr[i].first = *(int *)(startData);
+                    newNode->childBounds[nodeCount]->mbr[i].second = INT_MIN;
                     startData += sizeof(int);
                     pageOffset += sizeof(int);
-                    newBounds->mbr[i].first = min(newBounds->mbr[i].first, newNode->child_bounds[nodeCount]->mbr[i].first);
-                    newBounds->mbr[i].second = max(newBounds->mbr[i].second, newNode->child_bounds[nodeCount]->mbr[i].first);
+                    newBounds->mbr[i].first = min(newBounds->mbr[i].first, newNode->childBounds[nodeCount]->mbr[i].first);
+                    newBounds->mbr[i].second = max(newBounds->mbr[i].second, newNode->childBounds[nodeCount]->mbr[i].first);
                 }
                 nodeCount++;
                 N--;
@@ -422,7 +422,7 @@ void bulkLoad(int n, FileManager &fm, FileHandler &startFileHandler, FileHandler
             }
 
             copyNodeData(newNode, endData);
-            delete_node(newNode);
+            deleteNode(newNode);
             numNodes += 1;
             endData += NodeSize;
             endPageOffset += NodeSize;
@@ -455,7 +455,7 @@ MBR *new_area_mbr(MBR *a, MBR *b)
 }
 
 // convert a single point to mbr
-MBR *point_mbr(vector<int> v)
+MBR *pointToBounds(vector<int> v)
 {
     MBR *m = new MBR();
     for (int i = 0; i < m->mbr.size(); i++)
@@ -466,15 +466,15 @@ MBR *point_mbr(vector<int> v)
     return m;
 }
 
-MBR *new_area_point(MBR *a, vector<int> p)
+MBR *newPointArea(MBR *a, vector<int> p)
 {
-    MBR *b = point_mbr(p);
+    MBR *b = pointToBounds(p);
     MBR *new_mbr = new_area_mbr(a, b);
-    delete_mbr(b);
+    deleteBounds(b);
     return new_mbr;
 }
 // hyper_area
-long int get_area(MBR *m)
+long int boundsArea(MBR *m)
 {
     long int area = 1;
     for (int i = 0; i < d; i++)
@@ -495,7 +495,7 @@ bool belongs(MBR *a, MBR *b)
 }
 
 // check if two mbr's are same
-bool is_equal(MBR *a, MBR *b)
+bool compareBounds(MBR *a, MBR *b)
 {
     for (int i = 0; i < a->mbr.size(); i++)
     {
@@ -505,7 +505,7 @@ bool is_equal(MBR *a, MBR *b)
     return true;
 }
 
-void print_mbr(MBR *m)
+void printBounds(MBR *m)
 {
     cout << "Printing MBR \n";
     for (int i = 0; i < m->mbr.size(); i++)
@@ -521,23 +521,23 @@ bool search(vector<int> &P, FileHandler &fh, int index)
     PageHandler pageHandler = fh.PageAt(page_id);
 
     char *data = pageHandler.GetData();
-    Node *n = get_node(data, index);
+    Node *n = getNodeData(data, index);
 
     if (n->isLeaf() == false)
     {
 
         for (int i = 0; i < maxCap; i++)
         {
-            if (n->child_index[i] == INT_MIN)
+            if (n->childIndices[i] == INT_MIN)
             {
                 break;
             }
 
-            MBR *m = point_mbr(P);
+            MBR *m = pointToBounds(P);
             int is_belong = 1;
             for (int k = 0; k < m->mbr.size(); k++)
             {
-                if ((m->mbr[k].first < n->child_bounds[i]->mbr[k].first) || (m->mbr[k].first > n->child_bounds[i]->mbr[k].second))
+                if ((m->mbr[k].first < n->childBounds[i]->mbr[k].first) || (m->mbr[k].first > n->childBounds[i]->mbr[k].second))
                 {
                     is_belong = 0;
                     break;
@@ -545,26 +545,26 @@ bool search(vector<int> &P, FileHandler &fh, int index)
             }
             if (is_belong == 1)
             {
-                if (search(P, fh, n->child_index[i]))
+                if (search(P, fh, n->childIndices[i]))
                 {
-                    delete_mbr(m);
-                    delete_node(n);
+                    deleteBounds(m);
+                    deleteNode(n);
                     fh.UnpinPage(pageHandler.GetPageNum());
                     return true;
                 }
             }
-            delete_mbr(m);
+            deleteBounds(m);
         }
     }
     else
     {
         for (int i = 0; i < maxCap; i++)
         {
-            MBR *m = point_mbr(P);
+            MBR *m = pointToBounds(P);
             int is_same = 1;
             for (int j = 0; j < P.size(); j++)
             {
-                if ((P[j] != n->child_bounds[i]->mbr[j].first))
+                if ((P[j] != n->childBounds[i]->mbr[j].first))
                 {
                     is_same = 0;
                     break;
@@ -572,18 +572,18 @@ bool search(vector<int> &P, FileHandler &fh, int index)
             }
             if (is_same == 1)
             {
-                delete_mbr(m);
-                delete_node(n);
+                deleteBounds(m);
+                deleteNode(n);
                 fh.UnpinPage(pageHandler.GetPageNum());
                 return true;
             }
-            delete_mbr(m);
+            deleteBounds(m);
         }
-        delete_node(n);
+        deleteNode(n);
         fh.UnpinPage(pageHandler.GetPageNum());
         return false;
     }
-    delete_node(n);
+    deleteNode(n);
     fh.UnpinPage(pageHandler.GetPageNum());
     return false;
 }
@@ -685,15 +685,15 @@ int main(int argc, char *argv[])
                 char *data = pageHandler.GetData();
                 Node *newNode = new Node();
 
-                newNode->child_index[0] = -1;
+                newNode->childIndices[0] = -1;
                 newNode->index = focusIndex++;
-                newNode->parent_index = -1;
+                newNode->parentIndex = -1;
 
                 for (int i = 0; i < d; i++)
                 {
                     newNode->bounds->mbr[i].first = searchPoint[i];
                     newNode->bounds->mbr[i].second = searchPoint[i];
-                    newNode->child_bounds[0]->mbr[i].first = searchPoint[i];
+                    newNode->childBounds[0]->mbr[i].first = searchPoint[i];
                 }
                 rootIndex = 0;
 
