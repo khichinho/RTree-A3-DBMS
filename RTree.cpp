@@ -663,6 +663,49 @@ int main(int argc, char *argv[])
 
             fileManager.CloseFile(startFileHandler);
         }
+
+        if (command == "INSERT")
+        {
+            vector<int> searchPoint;
+            for (int dim = 0; dim < d; dim++)
+            {
+                position = input.find(" ");
+                searchPoint.push_back(stoi(input.substr(0, position)));
+                input.erase(0, 1 + position);
+            }
+
+            if (rootIndex != -1)
+            {
+                // insertNode(endFileHandler, fileManager, searchPoint, rootIndex);
+            }
+            else
+            {
+                PageHandler pageHandler = endFileHandler.NewPage();
+
+                char *data = pageHandler.GetData();
+                Node *newNode = new Node();
+
+                newNode->child_index[0] = -1;
+                newNode->index = focusIndex++;
+                newNode->parent_index = -1;
+
+                for (int i = 0; i < d; i++)
+                {
+                    newNode->bounds->mbr[i].first = searchPoint[i];
+                    newNode->bounds->mbr[i].second = searchPoint[i];
+                    newNode->child_bounds[0]->mbr[i].first = searchPoint[i];
+                }
+                rootIndex = 0;
+
+                copyNodeData(newNode, data);
+                endFileHandler.UnpinPage(pageHandler.GetPageNum());
+                endFileHandler.FlushPage(pageHandler.GetPageNum());
+            }
+
+            myfile << "INSERT\n\n\n";
+
+            endFileHandler.FlushPages();
+        }
     }
 
     fileManager.CloseFile(endFileHandler);
