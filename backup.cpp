@@ -799,7 +799,6 @@ Node *splitLeafNode(FileHandler &fileHandler, char *data, int nodeIndex, MBR *a)
         long long int newHyperVol2 = boundsHyperVolume(b2) - hyperVol2;
 
         nodeCount += 1;
-
         if (newHyperVol1 > newHyperVol2)
         {
             nc2.push_back(i);
@@ -1262,7 +1261,6 @@ int main(int argc, char *argv[])
     {
         int position = input.find(" ");
         string command = input.substr(0, position);
-
         input.erase(0, position + 1);
 
         if (command == "BULKLOAD")
@@ -1285,8 +1283,7 @@ int main(int argc, char *argv[])
         else if (command == "INSERT")
         {
             vector<int> Point;
-
-            for (int j = 0; j < d; j++)
+            for (int i = 0; i < d; i++)
             {
                 position = input.find(" ");
                 Point.push_back(stoi(input.substr(0, position)));
@@ -1295,13 +1292,14 @@ int main(int argc, char *argv[])
 
             if (rootIndex == -1)
             {
+                PageHandler pageHandler = endFileHandler.NewPage();
+
+                char *data = pageHandler.GetData();
                 Node *newNode = new Node();
+
                 newNode->childIndex[0] = -1;
                 newNode->index = focusIndex++;
                 newNode->parent_index = -1;
-
-                PageHandler pageHandler = endFileHandler.NewPage();
-                char *data = pageHandler.GetData();
 
                 for (int i = 0; i < d; i++)
                 {
@@ -1321,6 +1319,7 @@ int main(int argc, char *argv[])
             }
 
             myfile << "INSERT\n\n\n";
+
             endFileHandler.FlushPages();
         }
         else if (command == "QUERY")
@@ -1334,14 +1333,17 @@ int main(int argc, char *argv[])
             }
             if (search(searchPoint, endFileHandler, rootIndex))
             {
-                myfile << "TRUE\n\n\n";
+                myfile << "TRUE\n\n"
+                       << endl;
             }
             else
             {
-                myfile << "FALSE\n\n";
+                myfile << "FALSE\n\n"
+                       << endl;
             }
 
             endFileHandler.FlushPages();
+            // myfile << endl;
         }
     }
 

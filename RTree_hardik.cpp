@@ -96,74 +96,77 @@ public:
 };
 
 // store node in char* data
-Node *extract_node(char *data)
+Node *extractNodeData(char *data)
 {
-    Node *n = new Node();
+    Node *node = new Node();
+
     // assign all values to node variables
-    n->index = *(int *)(data);
-    data += sizeof(int);
-    n->parent_index = *(int *)(data);
-    data += sizeof(int);
-    for (int i = 0; i < n->bounds->mbr.size(); i++)
+    node->index = *(int *)(data);
+    data += 4;
+
+    // assign all parent_indexes to node variables
+    node->parent_index = *(int *)(data);
+    data += 4;
+    for (int i = 0; i < node->bounds->mbr.size(); i++)
     {
-        n->bounds->mbr[i].first = *(int *)(data);
-        data += sizeof(int);
+        node->bounds->mbr[i].first = *(int *)(data);
+        data += 4;
     }
-    for (int i = 0; i < n->bounds->mbr.size(); i++)
+    for (int i = 0; i < node->bounds->mbr.size(); i++)
     {
-        n->bounds->mbr[i].second = *(int *)(data);
-        data += sizeof(int);
+        node->bounds->mbr[i].second = *(int *)(data);
+        data += 4;
     }
 
-    for (int i = 0; i < n->child_index.size(); i++)
+    for (int i = 0; i < node->child_index.size(); i++)
     {
-        n->child_index[i] = *(int *)(data);
-        data += sizeof(int);
+        node->child_index[i] = *(int *)(data);
+        data += 4;
         for (int j = 0; j < d; j++)
         {
-            n->child_bounds[i]->mbr[j].first = *(int *)(data);
-            data += sizeof(int);
+            node->child_bounds[i]->mbr[j].first = *(int *)(data);
+            data += 4;
         }
         for (int j = 0; j < d; j++)
         {
-            n->child_bounds[i]->mbr[j].second = *(int *)(data);
-            data += sizeof(int);
+            node->child_bounds[i]->mbr[j].second = *(int *)(data);
+            data += 4;
         }
     }
-    return n;
+    return node;
 }
 
 // This function is to copy data from node to the memory
-void copy_data(Node *n, char *data)
+void copyNodeData(Node *node, char *data)
 {
-    memcpy(data, &n->index, sizeof(int));
-    data += sizeof(int);
-    memcpy(data, &n->parent_index, sizeof(int));
-    data += sizeof(int);
-    for (int i = 0; i < n->bounds->mbr.size(); i++)
+    memcpy(data, &node->index, 4);
+    data += 4;
+    memcpy(data, &node->parent_index, 4);
+    data += 4;
+    for (int i = 0; i < node->bounds->mbr.size(); i++)
     {
-        memcpy(data, &n->bounds->mbr[i].first, sizeof(int));
-        data += sizeof(int);
+        memcpy(data, &node->bounds->mbr[i].first, 4);
+        data += 4;
     }
-    for (int i = 0; i < n->bounds->mbr.size(); i++)
+    for (int i = 0; i < node->bounds->mbr.size(); i++)
     {
-        memcpy(data, &n->bounds->mbr[i].second, sizeof(int));
-        data += sizeof(int);
+        memcpy(data, &node->bounds->mbr[i].second, 4);
+        data += 4;
     }
     int i = 0;
-    while (i < n->child_index.size())
+    while (i < node->child_index.size())
     {
-        memcpy(data, &n->child_index[i], sizeof(int));
-        data += sizeof(int);
+        memcpy(data, &node->child_index[i], 4);
+        data += 4;
         for (int j = 0; j < d; j++)
         {
-            memcpy(data, &n->child_bounds[i]->mbr[j].first, sizeof(int));
-            data += sizeof(int);
+            memcpy(data, &node->child_bounds[i]->mbr[j].first, 4);
+            data += 4;
         }
         for (int j = 0; j < d; j++)
         {
-            memcpy(data, &n->child_bounds[i]->mbr[j].second, sizeof(int));
-            data += sizeof(int);
+            memcpy(data, &node->child_bounds[i]->mbr[j].second, 4);
+            data += 4;
         }
         i++;
     }
@@ -174,7 +177,7 @@ Node *get_node(char *data, int node_id)
     while (*((int *)(data)) != node_id)
         data += NodeSize;
 
-    return extract_node(data);
+    return extractNodeData(data);
 }
 
 void delete_mbr(MBR *m)
@@ -264,17 +267,18 @@ void assignParents(int start, int end, FileManager &fm, FileHandler &fh)
             {
                 if (PAGE_CONTENT_SIZE - NodeSize < offsetData)
                 {
+                    offsetData = 0;
+
                     fh.UnpinPage(startPageNumber);
 
                     startPageHandler = fh.NextPage(startPageNumber);
                     startPageNumber = startPageHandler.GetPageNum();
-                    fh.MarkDirty(startPageNumber);
 
+                    fh.MarkDirty(startPageNumber);
                     startData = startPageHandler.GetData();
-                    offsetData = 0;
                 }
 
-                Node *copyNode = extract_node(startData);
+                Node *copyNode = extractNodeData(startData);
                 memcpy((startData + sizeof(int)), &newNode->index, sizeof(int));
 
                 copyNode->parent_index = newNode->index;
@@ -299,15 +303,18 @@ void assignParents(int start, int end, FileManager &fm, FileHandler &fh)
 
             if (PAGE_CONTENT_SIZE - NodeSize < endPageOffset)
             {
+                endPageOffset = 0;
+
                 fh.UnpinPage(endPageNumber);
+
                 endPageHandler = fh.NewPage();
                 endPageNumber = endPageHandler.GetPageNum();
+
                 fh.MarkDirty(endPageNumber);
                 endData = endPageHandler.GetData();
-                endPageOffset = 0;
             }
             numNodes += 1;
-            copy_data(newNode, endData);
+            copyNodeData(newNode, endData);
             delete_node(newNode);
             endData += NodeSize;
             endPageOffset += NodeSize;
@@ -315,16 +322,21 @@ void assignParents(int start, int end, FileManager &fm, FileHandler &fh)
     }
     catch (InvalidPageException)
     {
-        cout << "[*] ERROR: Page is Invalid" << endl;
+        cout << "[*] ERROR: Page is Invalid\n";
     }
 
     fh.UnpinPage(startPageNumber);
     fh.UnpinPage(endPageNumber);
     fh.FlushPages();
-    if (numNodes == 1)
-        rootIndex = focusIndex - 1;
-    else if (numNodes != 1)
+
+    if (numNodes != 1)
+    {
         assignParents(end, end + numNodes, fm, fh);
+    }
+    else
+    {
+        rootIndex = focusIndex - 1;
+    }
 
     return;
 }
@@ -397,6 +409,8 @@ void bulkLoad(int n, FileManager &fm, FileHandler &startFileHandler, FileHandler
 
             if (PAGE_CONTENT_SIZE - NodeSize < endPageOffset)
             {
+                endPageOffset = 0;
+
                 endFileHandler.UnpinPage(endPageNumber);
 
                 endPageHandler = endFileHandler.NewPage();
@@ -405,10 +419,9 @@ void bulkLoad(int n, FileManager &fm, FileHandler &startFileHandler, FileHandler
                 endFileHandler.MarkDirty(endPageNumber);
 
                 endData = endPageHandler.GetData();
-                endPageOffset = 0;
             }
 
-            copy_data(newNode, endData);
+            copyNodeData(newNode, endData);
             delete_node(newNode);
             numNodes += 1;
             endData += NodeSize;
@@ -505,39 +518,14 @@ void print_mbr(MBR *m)
 bool search(vector<int> &P, FileHandler &fh, int index)
 {
     int page_id = index / (PAGE_CONTENT_SIZE / NodeSize);
-    PageHandler ph = fh.PageAt(page_id);
-    char *data = ph.GetData();
+    PageHandler pageHandler = fh.PageAt(page_id);
+
+    char *data = pageHandler.GetData();
     Node *n = get_node(data, index);
 
-    if (n->isLeaf())
+    if (n->isLeaf() == false)
     {
-        for (int i = 0; i < maxCap; i++)
-        {
-            MBR *m = point_mbr(P);
-            int is_same = 1;
-            for (int j = 0; j < P.size(); j++)
-            {
-                if ((P[j] != n->child_bounds[i]->mbr[j].first))
-                {
-                    is_same = 0;
-                    break;
-                }
-            }
-            if (is_same == 1)
-            {
-                delete_mbr(m);
-                delete_node(n);
-                fh.UnpinPage(ph.GetPageNum());
-                return true;
-            }
-            delete_mbr(m);
-        }
-        delete_node(n);
-        fh.UnpinPage(ph.GetPageNum());
-        return false;
-    }
-    else
-    {
+
         for (int i = 0; i < maxCap; i++)
         {
             if (n->child_index[i] == INT_MIN)
@@ -561,36 +549,66 @@ bool search(vector<int> &P, FileHandler &fh, int index)
                 {
                     delete_mbr(m);
                     delete_node(n);
-                    fh.UnpinPage(ph.GetPageNum());
+                    fh.UnpinPage(pageHandler.GetPageNum());
                     return true;
                 }
             }
             delete_mbr(m);
         }
     }
+    else
+    {
+        for (int i = 0; i < maxCap; i++)
+        {
+            MBR *m = point_mbr(P);
+            int is_same = 1;
+            for (int j = 0; j < P.size(); j++)
+            {
+                if ((P[j] != n->child_bounds[i]->mbr[j].first))
+                {
+                    is_same = 0;
+                    break;
+                }
+            }
+            if (is_same == 1)
+            {
+                delete_mbr(m);
+                delete_node(n);
+                fh.UnpinPage(pageHandler.GetPageNum());
+                return true;
+            }
+            delete_mbr(m);
+        }
+        delete_node(n);
+        fh.UnpinPage(pageHandler.GetPageNum());
+        return false;
+    }
     delete_node(n);
-    fh.UnpinPage(ph.GetPageNum());
+    fh.UnpinPage(pageHandler.GetPageNum());
     return false;
 }
 
 int main(int argc, char *argv[])
 {
-    FileManager fm;
     FileHandler startFileHandler, endFileHandler;
-    string input;
+    FileManager fileManager;
+
     ifstream infile(argv[1]);
     d = stoi(argv[3]);
     maxCap = stoi(argv[2]);
+
     NodeSize = (1 + 1 + 2 * d + maxCap + 2 * d * maxCap) * sizeof(int);
+
+    string input;
 
     try
     {
-        endFileHandler = fm.CreateFile("answer.txt");
+        endFileHandler = fileManager.CreateFile("answer.txt");
     }
     catch (InvalidPageException)
     {
-        fm.DestroyFile("answer.txt");
-        endFileHandler = fm.CreateFile("answer.txt");
+        fileManager.DestroyFile("answer.txt");
+        endFileHandler = fileManager.CreateFile("answer.txt");
     }
 
     ofstream myfile;
@@ -601,52 +619,54 @@ int main(int argc, char *argv[])
     {
         int position = input.find(" ");
         string command = input.substr(0, position);
+
         input.erase(0, position + 1);
+
+        if (command == "QUERY")
+        {
+            vector<int> searchPoint;
+            for (int dim = 0; dim < d; dim++)
+            {
+                position = input.find(" ");
+                searchPoint.push_back(stoi(input.substr(0, position)));
+                input.erase(0, 1 + position);
+            }
+            if (search(searchPoint, endFileHandler, rootIndex) == false)
+            {
+                myfile << "FALSE\n\n\n";
+            }
+            else
+            {
+                myfile << "TRUE\n\n\n";
+            }
+
+            endFileHandler.FlushPages();
+            // myfile << endl;
+        }
 
         if (command == "BULKLOAD")
         {
             position = input.find(" ");
+
             string inputfile = input.substr(0, position);
-            startFileHandler = fm.OpenFile(inputfile.c_str());
+
+            startFileHandler = fileManager.OpenFile(inputfile.c_str());
             input.erase(0, 1 + position);
 
             position = input.find(" ");
             int N = stoi(input.substr(0, position));
             input.erase(0, 1 + position);
 
-            bulkLoad(N, fm, startFileHandler, endFileHandler);
+            bulkLoad(N, fileManager, startFileHandler, endFileHandler);
 
-            myfile << "BULKLOAD\n\n";
+            myfile << "BULKLOAD\n\n\n";
 
-            fm.CloseFile(startFileHandler);
-        }
-        else if (command == "QUERY")
-        {
-            vector<int> searchPoint;
-            for (int i = 0; i < d; i++)
-            {
-                position = input.find(" ");
-                searchPoint.push_back(stoi(input.substr(0, position)));
-                input.erase(0, 1 + position);
-            }
-            if (search(searchPoint, endFileHandler, rootIndex))
-            {
-                myfile << "TRUE\n\n"
-                       << endl;
-            }
-            else
-            {
-                myfile << "FALSE\n\n"
-                       << endl;
-            }
-
-            endFileHandler.FlushPages();
-            // myfile << endl;
+            fileManager.CloseFile(startFileHandler);
         }
     }
 
-    fm.CloseFile(endFileHandler);
-    fm.DestroyFile("answer.txt");
+    fileManager.CloseFile(endFileHandler);
+    fileManager.DestroyFile("answer.txt");
 
     infile.close();
     myfile.close();
