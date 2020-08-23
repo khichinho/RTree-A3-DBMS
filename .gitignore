@@ -1,2 +1,10 @@
+.vscode
+
+*.o
 *.out
 moss
+
+answer.txt
+
+test.cpp
+out.txt
